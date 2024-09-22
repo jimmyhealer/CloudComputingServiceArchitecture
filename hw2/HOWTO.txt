@@ -1,5 +1,7 @@
 ## HW2
 
+###### author: 313832008 簡蔚驊
+
 ## Description
 
 This is a simple web application that allows you to create, read, update, delete and dumps todos.

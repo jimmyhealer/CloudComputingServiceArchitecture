@@ -1,16 +1,21 @@
+# Has 3 services: db, backend, frontend
 services:
   db:
     image: postgres:13
+    # set the postgres environment variables
     environment:
       POSTGRES_DB: $DB_NAME
       POSTGRES_USER: $DB_USER
       POSTGRES_PASSWORD: $DB_PASSWORD
+    # mount the postgres data volume
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    # share the network with the backend service
     networks:
       - backend
 
   backend:
+    # build the backend service from the Dockerfile in the backend directory
     build: ./backend
     environment:
       - Flask_ENV=production
@@ -18,17 +23,22 @@ services:
       - DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@db:5432/$DB_NAME
     depends_on:
       - db
+    # share the network with the db service and the frontend service respectively
     networks:
       - backend
       - frontend
 
   frontend:
+    # build the frontend service from the Dockerfile in the frontend directory
     build: ./frontend
+    # expose the frontend service on port 80
     ports:
       - "80:80"
+    # share the network with the backend service
     networks:
       - frontend
 
+# define the volumes and networks
 volumes:
   postgres-data:
 

@@ -1,0 +1,74 @@
+Vagrant.configure("2") do |config|
+  
+  # 同步環境變數文件
+  config.vm.provision "file", source: ".env", destination: "/vagrant/.env"
+
+  # DB Service VM
+  config.vm.define "db" do |db|
+    db.vm.box = "bento/ubuntu-20.04"
+    db.vm.network "private_network", ip: "192.168.56.10"
+    db.vm.provider "virtualbox" do |vb|
+      vb.name = "db_vm"
+      vb.memory = "512"
+    end
+    
+    db.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y postgresql
+      export $(cat /vagrant/.env | xargs)
+      sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/12/main/postgresql.conf
+      echo "host    all             all             0.0.0.0/0               md5" | sudo tee -a /etc/postgresql/12/main/pg_hba.conf
+      sudo systemctl restart postgresql
+      sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';"
+      sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+    SHELL
+  end
+
+  # Backend Service VM
+  config.vm.define "backend" do |backend|
+    backend.vm.box = "bento/ubuntu-20.04"
+    backend.vm.network "private_network", ip: "192.168.56.11"
+    backend.vm.provider "virtualbox" do |vb|
+      vb.name = "backend_vm"
+      vb.memory = "1024"
+    end
+    
+    # 同步本機 backend 資料夾到 VM
+    backend.vm.synced_folder "./backend", "/vagrant/backend"
+    
+    backend.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y python3-pip
+      export $(cat /vagrant/.env | xargs)
+      pip3 install -r /vagrant/backend/requirements.txt
+      cd /vagrant/backend
+      export DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@192.168.56.10:5432/$DB_NAME
+      nohup flask run --host=0.0.0.0 
+    SHELL
+  end
+
+  # Frontend Service VM
+  config.vm.define "frontend" do |frontend|
+    frontend.vm.box = "bento/ubuntu-20.04"
+    frontend.vm.network "private_network", ip: "192.168.56.12"
+    frontend.vm.provider "virtualbox" do |vb|
+      vb.name = "frontend_vm"
+      vb.memory = "512"
+    end
+    
+    # 同步本機 frontend 資料夾到 VM
+    frontend.vm.synced_folder "./frontend", "/vagrant/frontend"
+    
+    frontend.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get update
+      sudo apt-get install -y nginx
+      cp /vagrant/frontend/nginx.conf /etc/nginx/sites-available/default
+      rm -rf /usr/share/nginx/html
+      cp -r /vagrant/frontend/dist /usr/share/nginx/html
+      sudo systemctl restart nginx
+    SHELL
+
+    # Expose port 80 to the host machine
+    frontend.vm.network "forwarded_port", guest: 80, host: 8080
+  end
+end

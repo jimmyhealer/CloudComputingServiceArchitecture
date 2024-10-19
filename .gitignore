@@ -1,6 +1,8 @@
 node_modules
 venv
 .env
+.vagrant
+*.zip
 
 __pycache__
 
